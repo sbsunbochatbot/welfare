@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SB선보 복지 음성 AI 챗봇</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <main id="loginScreen" class="login-shell">
+    <section class="login-card glass">
+      <div class="brand-mark">SB</div>
+      <p class="eyebrow">SUNBO FAMILY</p>
+      <h1>복지 가이드 AI 챗봇</h1>
+      <p class="login-copy">복지 규정을 근거 기반으로 검색하고, 음성 질문과 음성 답변을 함께 사용할 수 있습니다.</p>
+      <form id="loginForm" class="login-form">
+        <label>아이디<input id="loginId" value="user1" autocomplete="username" /></label>
+        <label>비밀번호<input id="loginPw" type="password" value="1111" autocomplete="current-password" /></label>
+        <button class="primary" type="submit">로그인</button>
+      </form>
+      <div class="login-hint">기본 계정: admin / 1111, user1 / 1111</div>
+    </section>
+  </main>
+
+  <div id="appShell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="side-logo"><span>SB</span><div><b>SB선보</b><small>복지 음성 AI 챗봇</small></div></div>
+      <nav>
+        <button data-view="chat" class="nav-btn active">💬 복지 Q&A</button>
+        <button data-view="history" class="nav-btn">🗂 내 질문 메모</button>
+        <button data-view="admin" class="nav-btn admin-only hidden">📊 관리자 분석</button>
+        <button data-view="docs" class="nav-btn admin-only hidden">📄 규정 PDF 업로드</button>
+        <button data-view="users" class="nav-btn admin-only hidden">👥 사용자 관리</button>
+      </nav>
+      <div class="side-bottom">
+        <label class="tts-toggle"><input id="ttsAuto" type="checkbox" checked> 🔊 스피커 ON</label>
+        <label class="voice-label">음성 성별</label>
+        <select id="voiceGender" class="voice-select">
+          <option value="auto">자동 선택</option>
+          <option value="female">여성 음성 우선</option>
+          <option value="male">남성 음성 우선</option>
+        </select>
+        <label class="voice-label">음성 엔진</label>
+        <select id="voiceSelect" class="voice-select"></select>
+        <button id="logoutBtn" class="ghost">로그아웃</button>
+      </div>
+    </aside>
+
+    <section class="main-panel">
+      <header class="topbar">
+        <div><p class="eyebrow">SB선보 복지 가이드북 기반</p><h2 id="viewTitle">복지 Q&A</h2></div>
+        <div class="user-chip"><span id="userName">사용자</span><small id="userRole">user</small></div>
+      </header>
+
+      <section id="chatView" class="view active">
+        <div class="hero-card panel-card">
+          <img src="./assets/sb-welfare-cover.jpg" alt="SB선보 복지 가이드북 표지" />
+          <div>
+            <p class="eyebrow">VOICE FIRST · TEXT ALWAYS</p>
+            <h3>복지 규정을 존칭으로 안내드립니다.</h3>
+            <p>마이크 버튼으로 질문하면 인식 문장을 먼저 확인한 뒤 답변합니다. 질문이 불명확하면 바로 답하지 않고 다시 확인을 요청합니다.</p>
+          </div>
+        </div>
+        <div class="quick-wrap" id="quickQuestions"></div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div id="speechConfirm" class="speech-confirm hidden">
+          <div>
+            <b>음성 인식 결과를 확인해 주세요.</b>
+            <p id="speechRaw"></p>
+            <p id="speechCorrected"></p>
+          </div>
+          <div class="confirm-actions">
+            <button id="confirmSpeechBtn" class="primary small" type="button">이 내용으로 질문</button>
+            <button id="editSpeechBtn" class="secondary small" type="button">수정 후 질문</button>
+            <button id="cancelSpeechBtn" class="ghost-light small" type="button">취소</button>
+          </div>
+        </div>
+        <form id="chatForm" class="chat-input-bar">
+          <button id="voiceInputBtn" class="voice-btn" type="button" title="음성으로 질문하기">🎙️<span>음성</span></button>
+          <textarea id="questionInput" rows="2" placeholder="예: 자녀 입학 축하금은 얼마인가요? / 복지수당 월할 계산 기준은? 음성 입력 후 문장을 확인해 주세요."></textarea>
+          <button class="primary send" type="submit">질문</button>
+        </form>
+      </section>
+
+      <section id="historyView" class="view">
+        <div class="panel-card"><h3>질문·답변 메모</h3><p>로그인 사용자의 질문과 답변이 메모형 카드로 보관됩니다.</p></div>
+        <div id="historyList" class="memo-grid"></div>
+      </section>
+
+      <section id="adminView" class="view">
+        <div class="admin-grid">
+          <div class="stat-card"><span>총 질문</span><b id="statTotal">0</b></div>
+          <div class="stat-card"><span>미매칭 질문</span><b id="statUnanswered">0</b></div>
+          <div class="stat-card"><span>문서 버전</span><b id="statDocs">0</b></div>
+        </div>
+        <div class="two-col">
+          <div class="panel-card"><h3>질문 유형 분석</h3><div id="intentChart" class="bar-list"></div></div>
+          <div class="panel-card"><h3>보완 필요 질문</h3><div id="unansweredList" class="mini-list"></div></div>
+        </div>
+      </section>
+
+      <section id="docsView" class="view">
+        <div class="panel-card">
+          <h3>규정 PDF 업로드</h3>
+          <p>개정된 복지 규정 PDF를 업로드하면 PDF 텍스트를 추출하여 챗봇 지식이 갱신됩니다. 이미지형 PDF는 OCR 모드를 사용하세요.</p>
+          <div class="upload-row">
+            <input id="pdfFile" type="file" accept="application/pdf" />
+            <label class="check"><input id="ocrMode" type="checkbox"> 이미지형 PDF OCR 사용</label>
+            <button id="uploadPdfBtn" class="primary" type="button">PDF 반영</button>
+          </div>
+          <progress id="pdfProgress" max="100" value="0"></progress>
+          <pre id="pdfStatus" class="status-box">대기 중</pre>
+        </div>
+        <div class="panel-card"><h3>현재 문서</h3><div id="docList" class="mini-list"></div></div>
+      </section>
+
+      <section id="usersView" class="view">
+        <div class="panel-card">
+          <h3>사용자 Excel 일괄 업로드</h3>
+          <p>권장 컬럼: 아이디, 이름, 비밀번호, 권한, 부서, 직위, 이메일, 네이버웍스ID. 비밀번호가 비어 있으면 1111로 생성됩니다.</p>
+          <div class="upload-row">
+            <input id="excelFile" type="file" accept=".xlsx,.xls,.csv" />
+            <button id="uploadUsersBtn" class="primary" type="button">사용자 반영</button>
+          </div>
+          <pre id="userUploadStatus" class="status-box">대기 중</pre>
+        </div>
+        <div class="panel-card"><h3>사용자 목록</h3><div id="usersList" class="table-like"></div></div>
+      </section>
+    </section>
+  </div>
+</body>
+</html>
