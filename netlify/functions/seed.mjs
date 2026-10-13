@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.1.0-sbsunbo-welfare-voice-chatbot';
+export const APP_VERSION = '1.2.0-sbsunbo-welfare-voice-chatbot';
 
 export const SEED_POLICIES = [
   {

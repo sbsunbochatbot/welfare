@@ -4,6 +4,8 @@ let currentUser = null;
 let currentView = 'chat';
 let voices = [];
 let speaking = false;
+let speechResumeTimer = null;
+let ttsUnlocked = false;
 let recognition = null;
 let recognizing = false;
 let lastSpeechDraft = '';
@@ -89,14 +91,15 @@ function addBotMessage(text, sources=[], confidence=0, options={}){
   const conf = confidence ? `<button type="button">신뢰도 ${Math.round(confidence*100)}%</button>` : '';
   const clarify = options.needsClarification ? '<span class="clarify-chip">확인 필요</span>' : '';
   wrap.innerHTML=`<div class="avatar">SB</div><div class="bubble"><div>${escapeHtml(text)}</div>${src}<div class="bubble-actions"><button type="button" class="speak-btn">🔊 듣기</button><button type="button" class="stop-btn">⏹ 정지</button>${conf}${clarify}</div></div>`;
-  $('.speak-btn', wrap).onclick=()=>speak(text);
+  $('.speak-btn', wrap).onclick=()=>speak(text, { force:true });
   $('.stop-btn', wrap).onclick=stopSpeak;
   $('#chatMessages').appendChild(wrap); wrap.scrollIntoView({behavior:'smooth',block:'end'});
-  if($('#ttsAuto')?.checked && !options.skipAutoSpeak) speak(text);
+  if($('#ttsAuto')?.checked && !options.skipAutoSpeak) speak(text, { auto:true });
 }
 
 async function onChat(e){
   e.preventDefault();
+  unlockTts();
   hideSpeechConfirm();
   const input=$('#questionInput');
   const q=input.value.trim(); if(!q) return;
@@ -119,9 +122,12 @@ function initVoices(){
     refreshVoiceSelect();
   };
   load(); window.speechSynthesis.onvoiceschanged=load;
+  setTimeout(load, 250);
+  setTimeout(load, 1000);
   $('#voiceGender')?.addEventListener('change', ()=>{ persistVoiceSettings(); refreshVoiceSelect(); });
   $('#voiceSelect')?.addEventListener('change', persistVoiceSettings);
-  $('#ttsAuto')?.addEventListener('change', ()=>{ persistVoiceSettings(); if(!$('#ttsAuto').checked) stopSpeak(); });
+  $('#ttsAuto')?.addEventListener('change', ()=>{ persistVoiceSettings(); if(!$('#ttsAuto').checked) stopSpeak(); else unlockTts(); });
+  ['pointerdown','touchstart','keydown'].forEach(ev=>document.addEventListener(ev, unlockTts, { once:true, passive:true }));
 }
 function guessVoiceGender(v){
   const name = `${v.name || ''} ${v.lang || ''}`.toLowerCase();
@@ -153,24 +159,77 @@ function selectedVoice(){
   if(name) localStorage.setItem('sb_voice_name', name);
   return voices.find(v=>v.name===name) || voices.find(v=>v.lang?.startsWith('ko')) || null;
 }
-function speak(text){
+function unlockTts(){
+  if(ttsUnlocked || !('speechSynthesis' in window)) return;
+  ttsUnlocked = true;
+  try{
+    window.speechSynthesis.resume();
+    // 모바일 브라우저는 사용자의 첫 터치 이후 음성합성이 안정화되는 경우가 있어 무음에 가까운 짧은 발화를 1회 수행합니다.
+    const u = new SpeechSynthesisUtterance(' ');
+    u.lang = 'ko-KR'; u.volume = 0.01; u.rate = 1;
+    window.speechSynthesis.speak(u);
+    setTimeout(()=>window.speechSynthesis.cancel(), 80);
+  }catch(e){ console.warn('TTS unlock failed', e); }
+}
+function startSpeechPump(){
+  clearInterval(speechResumeTimer);
+  speechResumeTimer = setInterval(()=>{
+    try{ if(window.speechSynthesis?.speaking) window.speechSynthesis.resume(); }catch(e){}
+  }, 900);
+}
+function stopSpeechPump(){ clearInterval(speechResumeTimer); speechResumeTimer = null; }
+function splitForSpeech(text){
+  const clean = String(text || '')
+    .replace(/출처[:：].*$/s,'')
+    .replace(/[•·]\s*/g, ', ')
+    .replace(/\s+/g,' ')
+    .trim();
+  if(!clean) return [];
+  const parts = clean.split(/(?<=[.!?。]|요\.|다\.|니다\.|세요\.)\s+/).filter(Boolean);
+  const chunks=[];
+  for(const part of parts){
+    if(part.length <= 120) chunks.push(part);
+    else for(let i=0;i<part.length;i+=110) chunks.push(part.slice(i,i+110));
+  }
+  return chunks.length ? chunks : [clean];
+}
+function speak(text, options={}){
   if(!('speechSynthesis' in window)){ alert('이 브라우저는 TTS를 지원하지 않습니다.'); return; }
+  if(!options.force && $('#ttsAuto') && !$('#ttsAuto').checked) return;
+  unlockTts();
+  const chunks = splitForSpeech(text);
+  if(!chunks.length) return;
   stopSpeak();
-  const clean = String(text).replace(/출처[:：].*$/s,'').replace(/\s+/g,' ').trim();
-  const chunks = clean.match(/.{1,180}(?:[.!?。]|\s|$)/g) || [clean];
   const voice=selectedVoice(); speaking=true;
   let i=0;
   const next=()=>{
-    if(!speaking || i>=chunks.length) return;
+    if(!speaking || i>=chunks.length){ stopSpeechPump(); return; }
     const u = new SpeechSynthesisUtterance(chunks[i++]);
     u.lang = voice?.lang || 'ko-KR'; if(voice) u.voice=voice;
-    u.rate = 0.95; u.pitch=1.0; u.volume=1;
-    u.onend=()=>setTimeout(next, 60);
-    window.speechSynthesis.speak(u);
+    u.rate = 0.92; u.pitch=1.0; u.volume=1;
+    u.onstart=()=>{ startSpeechPump(); };
+    u.onend=()=>setTimeout(next, 80);
+    u.onerror=(ev)=>{
+      console.warn('TTS error', ev.error || ev);
+      if(ev.error === 'interrupted' || ev.error === 'canceled') return;
+      setTimeout(next, 120);
+    };
+    setTimeout(()=>{
+      try{
+        window.speechSynthesis.resume();
+        window.speechSynthesis.speak(u);
+      }catch(e){ console.warn('TTS speak failed', e); }
+    }, i === 1 ? 120 : 0);
   };
   next();
 }
-function stopSpeak(){ speaking=false; if('speechSynthesis' in window) window.speechSynthesis.cancel(); }
+function stopSpeak(){
+  speaking=false;
+  stopSpeechPump();
+  if('speechSynthesis' in window){
+    try{ window.speechSynthesis.cancel(); }catch(e){}
+  }
+}
 
 function initSpeechRecognition(){
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -353,5 +412,26 @@ $('#chatForm').addEventListener('submit', onChat);
 $$('.nav-btn').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 $('#uploadPdfBtn').addEventListener('click', uploadPdf);
 $('#uploadUsersBtn').addEventListener('click', uploadUsers);
+
+function removeNetlifyBadge(){
+  const hide = (el)=>{
+    if(!el || el === document.body || el === document.documentElement) return;
+    try{
+      const txt = (el.innerText || el.textContent || '').trim();
+      const attrs = `${el.id||''} ${el.className||''} ${el.getAttribute?.('title')||''} ${el.getAttribute?.('aria-label')||''} ${el.getAttribute?.('src')||''} ${el.getAttribute?.('href')||''}`.toLowerCase();
+      const looksBadge = /powered\s+by\s+netlify/i.test(txt) || /netlify/.test(attrs) && (getComputedStyle(el).position === 'fixed' || /badge|powered|toast|iframe/.test(attrs));
+      if(looksBadge){ el.style.setProperty('display','none','important'); el.style.setProperty('visibility','hidden','important'); el.setAttribute('aria-hidden','true'); }
+    }catch(e){}
+  };
+  document.querySelectorAll('iframe, a, div, span, button').forEach(hide);
+}
+function installNetlifyBadgeCleaner(){
+  removeNetlifyBadge();
+  const mo = new MutationObserver(()=>removeNetlifyBadge());
+  mo.observe(document.documentElement, { childList:true, subtree:true });
+  setInterval(removeNetlifyBadge, 1500);
+}
+
 window.addEventListener('beforeunload', stopSpeak);
+installNetlifyBadgeCleaner();
 bootstrap();

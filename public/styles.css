@@ -21,3 +21,20 @@ button,input,textarea,select{font:inherit}
 .hero-card img{width:92px;height:128px;object-fit:cover;border-radius:18px;box-shadow:0 14px 28px rgba(0,55,110,.18)}
 .hero-card h3{margin:0 0 8px;font-size:22px}.hero-card p{margin:0;color:var(--muted);line-height:1.55}.voice-label{font-size:12px;color:#b8d1ee;font-weight:800;margin-bottom:-8px}.voice-btn{border:0;border-radius:18px;min-width:72px;background:linear-gradient(135deg,#15b8a6,#0068c9);color:#fff;font-weight:900;cursor:pointer;display:grid;place-items:center;gap:2px;padding:10px 12px;box-shadow:0 10px 24px rgba(0,104,201,.22)}.voice-btn span{font-size:12px}.voice-btn.recording{background:linear-gradient(135deg,#e24a4a,#ff8a00);animation:pulseRec 1s infinite}.voice-btn.disabled{opacity:.5;cursor:not-allowed}@keyframes pulseRec{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}.speech-confirm{position:fixed;left:328px;right:28px;bottom:112px;z-index:5;background:rgba(255,255,255,.96);border:1px solid #bee1ff;border-radius:22px;padding:16px 18px;box-shadow:0 18px 50px rgba(0,35,75,.18);display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.speech-confirm b{color:#06386d}.speech-confirm p{margin:7px 0;color:#2c4666;line-height:1.45}.speech-confirm span{display:inline-block;margin-right:6px;color:#0068c9;font-weight:900}.speech-confirm small{color:#6b7a90}.confirm-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.small{padding:9px 12px!important;border-radius:12px!important;font-size:13px}.secondary{border:1px solid #b8d2e8;background:#fff;color:#1b4e86;font-weight:900;cursor:pointer}.ghost-light{border:1px solid #d8e6f3;background:#f8fbff;color:#526276;font-weight:900;cursor:pointer}.clarify-chip{display:inline-block;border:1px solid #ffd596;background:#fff8e6;color:#9a6200;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900}.tts-toggle input{accent-color:#15b8a6}.bubble-actions .clarify-chip{align-self:center}
 @media(max-width:860px){.hero-card{align-items:flex-start}.hero-card img{width:70px;height:98px}.speech-confirm{left:14px;right:14px;bottom:112px;display:block}.confirm-actions{justify-content:flex-start;margin-top:10px}.voice-btn{min-width:58px}.chat-input-bar{gap:8px}.chat-input-bar textarea{padding:14px}}
+
+
+/* v1.2 Netlify Drop badge 제거 및 모바일 하단 입력영역 확보 */
+iframe[src*="netlify"],
+iframe[title*="Netlify"],
+a[href*="netlify.com"],
+[id*="netlify"],
+[class*="netlify"],
+[data-testid*="netlify"]{
+  display:none !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+@media(max-width:860px){
+  .chat-input-bar{bottom:max(14px, env(safe-area-inset-bottom)); z-index:20;}
+  .speech-confirm{z-index:30;}
+}
